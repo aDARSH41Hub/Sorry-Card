@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>For My Friend — Oops, I'm Sorry</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root{
+            /* lighter pastel background */
+            --bg1: #fff8fb;
+            --bg2: #f7f4ff;
+            --accent: #ff4da6;
+            --accent-2: #ff97c2;
+            --glass: rgba(255,255,255,0.8);
+        }
+        html,body{height:100%;}
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg,var(--bg1),var(--bg2));
+            color: #112;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            text-align: center;
+            overflow: hidden;
+        }
+        .card{
+            width: min(720px, 92%);
+            padding: 28px 22px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(250,250,255,0.9));
+            box-shadow: 0 10px 30px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+            backdrop-filter: blur(4px) saturate(120%);
+        }
+        h1{
+            margin: 0 0 10px 0;
+            font-size: clamp(24px, 4vw, 36px);
+            letter-spacing: -0.02em;
+            color: #fff;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:12px;
+        }
+    .heart{font-size:1.1em; color: var(--accent); transform: translateY(2px);}
+        p.lead{
+            margin: 8px 0 18px 0;
+            color: #26323a;
+            opacity: 0.95;
+        }
+        .btn{
+            appearance:none;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 999px;
+            background: linear-gradient(90deg,var(--accent),var(--accent-2));
+            color:#081421;
+            font-weight:600;
+            cursor:pointer;
+            box-shadow: 0 6px 22px rgba(255,77,166,0.18);
+            transition: transform .18s ease, box-shadow .18s ease;
+        }
+        .btn:active{transform: translateY(2px) scale(.995);}
+        .btn:focus{outline: 3px solid rgba(255,77,166,0.18);}
+        .small{font-size:0.9rem; opacity:0.9}
+        .hint{margin-top:14px;color:#9fb6d9;font-size:0.9rem}
+
+        /* flower pieces */
+        .flower{
+            position: absolute;
+            pointer-events: none;
+            font-size: 18px;
+            will-change: transform, opacity;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        }
+
+        /* tiny pulse to draw attention */
+        .pulse{
+            display:inline-block;
+            width:10px;height:10px;border-radius:50%;background:var(--accent);
+            box-shadow:0 0 0 0 rgba(255,122,144,0.3);
+            animation: pulse 1.6s infinite;
+        }
+        @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,122,144,0.25)}70%{box-shadow:0 0 0 10px rgba(255,122,144,0)}100%{box-shadow:0 0 0 0 rgba(255,122,144,0)}}
+
+        /* small playful footer */
+        .footer{margin-top:18px;color:#9fb6d9;font-size:0.85rem}
+
+    /* layout for yes/no buttons */
+    .choice-row{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:8px;position:relative}
+    .choice-wrap{position:relative;min-height:56px}
+    /* animate movement smoothly; keep size stable */
+    #noBtn{position:absolute; right:12px; top:0; transition: left .28s cubic-bezier(.2,.9,.2,1), top .28s cubic-bezier(.2,.9,.2,1); will-change: left, top, transform}
+    #noBtn:hover, #noBtn:active, #noBtn:focus{transform:none !important}
+    /* ensure buttons have stable min width so sizes are consistent */
+    .choice-row .btn{min-width:140px}
+
+    /* overlay visibility + transitions */
+    #overlay{position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(2,6,23,0.25);z-index:99999;display:flex;opacity:0;pointer-events:none;transition:opacity .28s ease}
+    #overlay.visible{opacity:1;pointer-events:auto}
+    #overlayCard{transform:scale(.98);transition:transform .28s cubic-bezier(.2,.9,.2,1), opacity .22s ease}
+    #overlay.visible #overlayCard{transform:scale(1);}
+
+        @media (prefers-reduced-motion: reduce){
+            *{animation:none !important; transition:none !important}
+        }
+    </style>
+</head>
+<body>
+    <main class="card" role="main" aria-labelledby="title">
+        <h1 id="title">Oops... <span class="heart">🌸</span></h1>
+        <p class="lead">Hey friend — I messed up and I want to make it right. Choose below or tap anywhere for a little surprise.</p>
+
+        <div class="choice-wrap">
+            <div class="choice-row" id="choices">
+                <button class="btn" id="yesBtn">Yes — I forgive you</button>
+                <button class="btn" id="noBtn" aria-hidden="true">Nope</button>
+            </div>
+        </div>
+
+        <div class="hint small">Or press <kbd>Enter</kbd> / tap anywhere to sprinkle flowers.</div>
+
+        <p class="footer">Sincere apologies (and flowers)</p>
+        <!-- (sharing removed) -->
+    </main>
+
+    <!-- confetti container (pieces injected by JS) -->
+    <div id="confetti"></div>
+
+    <!-- Modal for messages -->
+    <div id="overlay" style="position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(2,6,23,0.25);z-index:99999">
+        <div id="overlayCard" style="background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,255,0.98));padding:18px;border-radius:12px;max-width:90%;width:360px;text-align:center;color:#072;box-shadow:0 8px 30px rgba(15,23,42,0.08)">
+            <h3 style="margin:0 0 8px 0">Message</h3>
+            <div id="modalMessage" style="margin:6px 0;padding:6px 8px;font-weight:600;color:#072"></div>
+            <div style="margin-top:12px;display:flex;gap:10px;justify-content:center"><button class="btn" id="overlayClose">Close</button></div>
+        </div>
+    </div>
+
+    <script>
+        // Accessibility: focus primary button on load
+        const yesBtn = document.getElementById('yesBtn');
+        const noBtn = document.getElementById('noBtn');
+        const confettiRoot = document.getElementById('confetti');
+        const choicesWrap = document.getElementById('choices');
+        setTimeout(()=> yesBtn.focus(), 50);
+
+        // Lock No button to its current size so it doesn't expand on hover; switch to fixed positioning
+        (function stabilizeNoButton(){
+            const r = noBtn.getBoundingClientRect();
+            noBtn.style.width = Math.max(84, Math.round(r.width)) + 'px';
+            noBtn.style.height = Math.max(36, Math.round(r.height)) + 'px';
+            // use fixed positioning so it can roam the viewport freely
+            noBtn.style.position = 'fixed';
+            // position initially near where it was inside the card
+            const containerRect = choicesWrap.getBoundingClientRect();
+            const initialLeft = containerRect.left + containerRect.width - r.width - 12;
+            const initialTop = containerRect.top;
+            noBtn.style.left = Math.max(8, initialLeft) + 'px';
+            noBtn.style.top = Math.max(8, initialTop) + 'px';
+        })();
+
+        function saySorry() {
+            // kept for backward compatibility: show a small toast
+            const message = "Thank you — that means a lot. Let's talk when you're ready.";
+            showToast(message);
+            triggerFlowers(30);
+        }
+
+        // show a modal message (reuses overlay). If fullFlowers true, run a bigger fullscreen shower
+        function showMessageModal(msg, fullFlowers=false){
+            const modalMessage = document.getElementById('modalMessage');
+            modalMessage.textContent = msg || '';
+            // show overlay with fade/scale
+            overlay.classList.add('visible');
+            if(fullFlowers){
+                // spawn a lot of flowers across the viewport
+                fullScreenFlowers();
+                // auto-close the overlay after the fullscreen flower shower finishes
+                // faster now (3.5s) and smoother fade-out
+                setTimeout(()=>{
+                    overlay.classList.remove('visible');
+                    setTimeout(()=>{ modalMessage.textContent = ''; }, 320);
+                }, 3500);
+            } else {
+                // quick popup for regular clicks: auto-close after ~1.2s
+                setTimeout(()=>{
+                    overlay.classList.remove('visible');
+                    setTimeout(()=>{ modalMessage.textContent = ''; }, 220);
+                }, 1200);
+            }
+        }
+
+        function fullScreenFlowers(){
+            // spawn multiple bursts across the viewport
+            const w = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+            const h = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+            // create several bursts at random positions
+            for(let i=0;i<18;i++){
+                const cx = Math.random() * w;
+                const cy = Math.random() * h * 0.6; // mostly upper area
+                triggerFlowers(18 + Math.floor(Math.random()*20), cx, cy);
+            }
+            // also add a gentle rain of petals from the top
+            for(let t=0;t<6;t++){
+                setTimeout(()=>{
+                    for(let j=0;j<60;j++){
+                        const x = Math.random()*w;
+                        const y = - (Math.random()*80);
+                        triggerFlowers(1, x, y);
+                    }
+                }, t*220);
+            }
+        }
+
+        // small toast message
+        function showToast(text){
+            const toast = document.createElement('div');
+            toast.textContent = text;
+            toast.setAttribute('role','status');
+            toast.style.position='fixed';
+            toast.style.left='50%'; toast.style.transform='translateX(-50%)';
+            toast.style.bottom='36px';
+            toast.style.background='rgba(6,18,36,0.9)';
+            toast.style.color='#dbe9ff';
+            toast.style.padding='14px 18px';
+            toast.style.borderRadius='12px';
+            toast.style.boxShadow='0 6px 20px rgba(2,6,23,0.6)';
+            toast.style.zIndex = 9999;
+            document.body.appendChild(toast);
+            setTimeout(()=>{ toast.style.transition='opacity .45s, transform .45s'; toast.style.opacity=0; toast.style.transform='translateX(-50%) translateY(8px)'; }, 2600);
+            setTimeout(()=>toast.remove(), 3200);
+        }
+
+        yesBtn.addEventListener('click', ()=>{
+            // on Yes click, show the special apology and a fullscreen flower shower
+            showMessageModal("I am Sorry Ankita ", true);
+        });
+
+        // allow keyboard 'Enter' to trigger yes
+        document.addEventListener('keydown', (e)=>{
+            if(e.key === 'Enter') { saySorry(); }
+        });
+
+        // (click handling moved to guarded listener below to avoid double-firing on touch devices)
+
+        // Flowers effect (pink blossoms)
+        function triggerFlowers(count = 20, clientX = null, clientY = null){
+            const pieces = [];
+            for(let i=0;i<count;i++){
+                const el = document.createElement('div');
+                el.className = 'flower';
+                el.textContent = '🌸';
+                // size and start position
+                const size = 12 + Math.random()*18;
+                el.style.fontSize = size + 'px';
+                el.style.left = (clientX === null) ? (50 + (Math.random()-0.5)*60) + '%' : (clientX + (Math.random()-0.5)*80) + 'px';
+                el.style.top = (clientY === null) ? (-10 + Math.random()*10) + '%' : (clientY + (Math.random()-0.5)*30) + 'px';
+                el.style.opacity = 1;
+                confettiRoot.appendChild(el);
+                pieces.push(el);
+            }
+
+            pieces.forEach((p, idx)=>{
+                const dx = (Math.random()-0.5) * 160;
+                const dy = 120 + Math.random()*260;
+                const rot = (Math.random()-0.5)*720;
+                const dur = 1000 + Math.random()*1200;
+                p.animate([
+                    { transform: `translate3d(0,0,0) rotate(0deg)`, opacity:1 },
+                    { transform: `translate3d(${dx}px, ${dy}px, 0) rotate(${rot}deg)`, opacity:0 }
+                ], { duration: dur, easing: 'cubic-bezier(.17,.67,.38,1)', delay: idx*12 });
+                setTimeout(()=> p.remove(), dur + idx*14 + 60);
+            });
+        }
+
+        // No-button dodge behavior
+        function moveNoButton(){
+            // Move the No button to a random location within the viewport,
+            // but avoid overlapping the Yes button or the main card content.
+            const yesRect = yesBtn.getBoundingClientRect();
+            const cardRect = document.querySelector('.card').getBoundingClientRect();
+            const btnRect = noBtn.getBoundingClientRect();
+            const margin = 12; // safe distance in px
+
+            const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+            const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+
+            // helper to check overlap with a given rect (with margin)
+            function overlapsRect(x, y, rect){
+                const noLeft = x;
+                const noTop = y;
+                const noRight = noLeft + btnRect.width;
+                const noBottom = noTop + btnRect.height;
+                const rLeft = rect.left - margin;
+                const rTop = rect.top - margin;
+                const rRight = rect.right + margin;
+                const rBottom = rect.bottom + margin;
+                return !(noRight < rLeft || noLeft > rRight || noBottom < rTop || noTop > rBottom);
+            }
+
+            const maxLeft = Math.max(8, vw - btnRect.width - 8);
+            const maxTop = Math.max(8, vh - btnRect.height - 8);
+
+            let attempt = 0;
+            let left, top;
+            const maxAttempts = 60;
+            do {
+                left = Math.floor(8 + Math.random() * (maxLeft - 8));
+                top = Math.floor(8 + Math.random() * (maxTop - 8));
+                attempt++;
+                if(attempt >= maxAttempts) break;
+            } while(overlapsRect(left, top, yesRect) || overlapsRect(left, top, cardRect));
+
+            // Ensure fixed positioning so it's placed relative to viewport
+            noBtn.style.position = 'fixed';
+            noBtn.style.left = left + 'px';
+            noBtn.style.top = top + 'px';
+        }
+
+    // Move when user tries to interact (mouse)
+    noBtn.addEventListener('mouseenter', (e)=> moveNoButton());
+    // debounce mousemove to avoid excessive repositioning
+    let mmTimer = null;
+    noBtn.addEventListener('mousemove', (e)=>{ clearTimeout(mmTimer); mmTimer = setTimeout(()=> moveNoButton(), 80); });
+        noBtn.addEventListener('focus', (e)=>{ moveNoButton(); noBtn.blur(); });
+        noBtn.addEventListener('click', (e)=>{ e.preventDefault(); moveNoButton(); });
+
+        // Mobile: touch handlers so the No button dodges on touch attempts
+        let lastTouchTime = 0;
+        noBtn.addEventListener('touchstart', (e)=>{
+            lastTouchTime = Date.now();
+            moveNoButton();
+            // prevent the touch from also triggering a click later
+            e.preventDefault();
+        }, {passive:false});
+        noBtn.addEventListener('touchmove', (e)=>{ moveNoButton(); }, {passive:true});
+
+        // document-level touch to spawn flowers where user touched
+        document.addEventListener('touchstart', (e)=>{
+            lastTouchTime = Date.now();
+            const t = e.touches[0];
+            triggerFlowers(8, t.clientX, t.clientY);
+        }, {passive:true});
+
+        // clicking fallback: ignore clicks that happen immediately after a touch to avoid double spawns
+        document.addEventListener('click', (e)=>{
+            if(Date.now() - lastTouchTime < 500) return;
+            // don't react if clicking on UI controls (buttons/overlay) or the No button specifically
+            if(e.target === noBtn) return;
+            if(e.target.closest && e.target.closest('.btn')) return;
+            if(e.target.closest && e.target.closest('#overlay')) return;
+
+            // show a popup apology message for any page click
+            showMessageModal("I'am sorry Ankita ", false);
+
+            // spawn a smaller burst where clicked
+            const x = e.clientX; const y = e.clientY;
+            triggerFlowers(10, x, y);
+        });
+
+        // Make sure it moves on window resize so it stays on-screen
+        window.addEventListener('resize', ()=> { setTimeout(()=> moveNoButton(), 80); });
+
+    // overlay element and close handler (use visible class for transitions)
+    const overlay = document.getElementById('overlay');
+    const overlayClose = document.getElementById('overlayClose');
+    overlayClose.addEventListener('click', ()=> overlay.classList.remove('visible'));
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('visible') });
+    </script>
+</body>
+</html>
