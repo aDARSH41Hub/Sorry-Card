@@ -98,10 +98,27 @@
     .choice-row .btn{min-width:140px}
 
     /* overlay visibility + transitions */
-    #overlay{position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(2,6,23,0.25);z-index:99999;display:flex;opacity:0;pointer-events:none;transition:opacity .28s ease}
+    /* overlay + modal: smoother fade + subtle translate for nicer motion */
+    #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.25);z-index:99999;opacity:0;pointer-events:none;transition:opacity .32s cubic-bezier(.2,.9,.2,1)}
     #overlay.visible{opacity:1;pointer-events:auto}
-    #overlayCard{transform:scale(.98);transition:transform .28s cubic-bezier(.2,.9,.2,1), opacity .22s ease}
-    #overlay.visible #overlayCard{transform:scale(1);}
+    /* subtle backdrop blur (if supported) when modal visible */
+    #overlay.visible{backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);} 
+
+    /* card starts slightly lower and scaled down with zero opacity, then eases up to full */
+    #overlayCard{transform:translateY(10px) scale(.98);opacity:0;transition:transform .32s cubic-bezier(.2,.9,.25,1), opacity .28s cubic-bezier(.2,.9,.25,1);transform-origin:center;will-change:transform,opacity}
+    #overlay.visible #overlayCard{transform:translateY(0) scale(1);opacity:1}
+
+    /* visual styling for the overlay card moved from inline markup to CSS for consistency */
+    #overlayCard{
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,255,0.98));
+        padding: 18px;
+        border-radius: 12px;
+        max-width: 90%;
+        width: 360px;
+        text-align: center;
+        color: #072;
+        box-shadow: 0 8px 30px rgba(15,23,42,0.08);
+    }
 
         @media (prefers-reduced-motion: reduce){
             *{animation:none !important; transition:none !important}
@@ -110,7 +127,7 @@
 </head>
 <body>
     <main class="card" role="main" aria-labelledby="title">
-        <h1 id="title">Oops... <span class="heart">🌸🌸🌸</span></h1>
+        <h1 id="title">Oops... <span class="heart">🌸</span></h1>
         <p class="lead">Hey friend — I messed up and I want to make it right. Choose below or tap anywhere for a little surprise.</p>
 
         <div class="choice-wrap">
@@ -130,9 +147,9 @@
     <div id="confetti"></div>
 
     <!-- Modal for messages -->
-    <div id="overlay" style="position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(2,6,23,0.25);z-index:99999">
-        <div id="overlayCard" style="background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,255,0.98));padding:18px;border-radius:12px;max-width:90%;width:360px;text-align:center;color:#072;box-shadow:0 8px 30px rgba(15,23,42,0.08)">
-            <h3 style="margin:0 0 8px 0">Message</h3>
+    <div id="overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+        <div id="overlayCard" tabindex="-1">
+            <h3 id="overlayTitle" style="margin:0 0 8px 0">Message</h3>
             <div id="modalMessage" style="margin:6px 0;padding:6px 8px;font-weight:600;color:#072"></div>
             <div style="margin-top:12px;display:flex;gap:10px;justify-content:center"><button class="btn" id="overlayClose">Close</button></div>
         </div>
@@ -172,23 +189,34 @@
         function showMessageModal(msg, fullFlowers=false){
             const modalMessage = document.getElementById('modalMessage');
             modalMessage.textContent = msg || '';
-            // show overlay with fade/scale
+            // show overlay with fade/scale/translate
             overlay.classList.add('visible');
+
+            // helper to hide overlay after a delay and clear content after transition completes
+            function hideAfter(delay){
+                setTimeout(()=>{
+                    // remove visible -> triggers CSS transition
+                    overlay.classList.remove('visible');
+
+                    // clear message after the overlay finished fading out
+                    const onTransitionEnd = (e)=>{
+                        if(e.target !== overlay) return; // only react to overlay's transition
+                        overlay.removeEventListener('transitionend', onTransitionEnd);
+                        // small timeout to ensure card opacity transition finished as well
+                        setTimeout(()=>{ modalMessage.textContent = ''; }, 8);
+                    };
+                    overlay.addEventListener('transitionend', onTransitionEnd);
+                }, delay);
+            }
+
             if(fullFlowers){
                 // spawn a lot of flowers across the viewport
                 fullScreenFlowers();
-                // auto-close the overlay after the fullscreen flower shower finishes
-                // faster now (3.5s) and smoother fade-out
-                setTimeout(()=>{
-                    overlay.classList.remove('visible');
-                    setTimeout(()=>{ modalMessage.textContent = ''; }, 320);
-                }, 3500);
+                // auto-close after the shower
+                hideAfter(3500);
             } else {
                 // quick popup for regular clicks: auto-close after ~1.2s
-                setTimeout(()=>{
-                    overlay.classList.remove('visible');
-                    setTimeout(()=>{ modalMessage.textContent = ''; }, 220);
-                }, 1200);
+                hideAfter(1200);
             }
         }
 
@@ -363,11 +391,94 @@
         // Make sure it moves on window resize so it stays on-screen
         window.addEventListener('resize', ()=> { setTimeout(()=> moveNoButton(), 80); });
 
-    // overlay element and close handler (use visible class for transitions)
+        // overlay element and close helper (use visible class for transitions)
     const overlay = document.getElementById('overlay');
     const overlayClose = document.getElementById('overlayClose');
-    overlayClose.addEventListener('click', ()=> overlay.classList.remove('visible'));
-    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('visible') });
+
+    // respect reduced-motion preference in JS behaviour
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Focus-trap state
+    let previousActive = null;
+    let trapKeydownHandler = null;
+
+    // utility: find all tabbable elements inside a container
+    function getTabbable(container){
+        return Array.from(container.querySelectorAll('a[href], area[href], input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, [tabindex]:not([tabindex="-1"]), [contenteditable]'))
+            .filter(el => el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length);
+    }
+
+    function activateFocusTrap(){
+        const card = document.getElementById('overlayCard');
+        const tabbables = getTabbable(card);
+        const first = tabbables[0] || card;
+        const last = tabbables[tabbables.length - 1] || card;
+
+        // keydown handler to trap Tab and close on Escape
+        trapKeydownHandler = function(e){
+            if(e.key === 'Escape'){
+                e.preventDefault();
+                closeOverlay();
+                return;
+            }
+            if(e.key !== 'Tab') return;
+            if(tabbables.length === 0){
+                // no tabbables: keep focus on the card
+                e.preventDefault();
+                card.focus();
+                return;
+            }
+
+            if(e.shiftKey){
+                if(document.activeElement === first || document.activeElement === card){
+                    e.preventDefault();
+                    last.focus();
+                }
+            } else {
+                if(document.activeElement === last){
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+
+        document.addEventListener('keydown', trapKeydownHandler);
+        // focus the close button for easy dismissal, fallback to card
+        setTimeout(()=>{ (overlayClose || card).focus(); }, 30);
+    }
+
+    function deactivateFocusTrap(){
+        if(trapKeydownHandler) document.removeEventListener('keydown', trapKeydownHandler);
+        trapKeydownHandler = null;
+    }
+
+    // central close function: removes visible, waits for transition to finish, then clears content and restores aria-hidden
+    function closeOverlay(){
+        if(!overlay.classList.contains('visible')) return;
+        overlay.classList.remove('visible');
+        overlay.setAttribute('aria-hidden', 'true');
+        deactivateFocusTrap();
+
+        if(reduceMotion){
+            // no transitions — clear quickly and restore focus
+            document.getElementById('modalMessage').textContent = '';
+            if(previousActive) previousActive.focus();
+            previousActive = null;
+            return;
+        }
+
+        const onTransitionEnd = (e) => {
+            if(e.target !== overlay) return;
+            overlay.removeEventListener('transitionend', onTransitionEnd);
+            document.getElementById('modalMessage').textContent = '';
+            if(previousActive) previousActive.focus();
+            previousActive = null;
+        };
+        overlay.addEventListener('transitionend', onTransitionEnd);
+    }
+
+    overlayClose.addEventListener('click', closeOverlay);
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeOverlay(); });
     </script>
 </body>
 </html>
